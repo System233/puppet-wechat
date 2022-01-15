@@ -33,13 +33,13 @@ Cause `storage.googleapis.com` is blocked in mainland china, you'd better config
 ### 1. Linux & Mac
 
 ```shell
-PUPPETEER_DOWNLOAD_HOST=https://npm.taobao.org/mirrors npm install wechaty-puppet-wechat
+PUPPETEER_DOWNLOAD_HOST=https://registry.npmmirror.com/mirrors npm install wechaty-puppet-wechat
 ```
 
 ### 2. Windows
 
 ```shell
-SET PUPPETEER_DOWNLOAD_HOST=https://npm.taobao.org/mirrors npm install wechaty-puppet-wechat
+SET PUPPETEER_DOWNLOAD_HOST=https://registry.npmmirror.com/mirrors npm install wechaty-puppet-wechat
 ```
 
 Learn more from <https://github.com/GoogleChrome/puppeteer/issues/1597#issuecomment-351945645>
@@ -72,19 +72,20 @@ const bot = new Wechaty({
 });
 ```
 
-We use [stealth](https://www.npmjs.com/package/puppeteer-extra-plugin-stealth) to make puppeteer more like a normal browser, if you want to disabled it, just set the `WECHATY_PUPPET_PUPPETEER_STEALTHLESS` environment variable to `1`. eg. `WECHATY_PUPPET_PUPPETEER_STEALTHLESS=1 ts-node your-bot.ts`
+We use [stealth](https://www.npmjs.com/package/puppeteer-extra-plugin-stealth) to make puppeteer more like a normal browser, if you want to disabled it, just set the `WECHATY_PUPPET_WECHAT_PUPPETEER_STEALTHLESS` environment variable to `1`. eg. `WECHATY_PUPPET_WECHAT_PUPPETEER_STEALTHLESS=1 ts-node your-bot.ts`
 
-[In rare cases](https://github.com/wechaty/matrix-appservice-wechaty/issues/78#issuecomment-882208894), we could meet some problem and see `Error: Could not find expected browser` when we start PuppetWeChatBridge and try to run `initBrowser()`. A easy way to solve this problem is set `WECHATY_PUPPET_PUPPETEER_ENDPOINT` environment variable to `<your executablePath>`. eg. `WECHATY_PUPPET_PUPPETEER_ENDPOINT=/usr/bin/chromium-browser ts-node your-bot.ts`
+[In rare cases](https://github.com/wechaty/matrix-appservice-wechaty/issues/78#issuecomment-882208894), we could meet some problem and see `Error: Could not find expected browser` when we start PuppetWeChatBridge and try to run `initBrowser()`. A easy way to solve this problem is set `WECHATY_PUPPET_WECHAT_ENDPOINT` environment variable to `<your executablePath>`. eg. `WECHATY_PUPPET_WECHAT_ENDPOINT=/usr/bin/chromium-browser ts-node your-bot.ts`
 
 ## puppetOptions
 
 | Option        |  value  | default value | description                                                                                                                 |
 | ------------- | :-----: | :-----------: | :-------------------------------------------------------------------------------------------------------------------------- |
-| token         | string  |       -       | your own extspam value, see [#127](https://github.com/wechaty/wechaty-puppet-wechat/issues/127)                             |
+| token         | string  |       -       | your own uos extspam value, see [#127](https://github.com/wechaty/wechaty-puppet-wechat/issues/127)                         |
 | endpoint      | string  |       -       | puppeteerlaunchoptions.executablePath                                                                                       |
 | head          | boolean |     false     | puppeteerlaunchoptions.headless                                                                                             |
 | launchOptions | object  |       -       | same to [puppeteerlaunchoptions](https://github.com/GoogleChrome/puppeteer/blob/v1.18.1/docs/api.md#puppeteerlaunchoptions) |
 | stealthless   | boolean |     false     | disabled [puppeteer-extra-plugin-stealth](https://www.npmjs.com/package/puppeteer-extra-plugin-stealth) or not              |
+| uos           | boolean |     false     | enable [UOS patch](https://github.com/wechaty/puppet-wechat/issues/127) or not                                              |
 
 ## HISTORY
 

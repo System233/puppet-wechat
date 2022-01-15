@@ -19,7 +19,6 @@
 import path    from 'path'
 import nodeUrl from 'url'
 
-import BufferList from 'bl'
 import md5        from 'md5'
 import mime       from 'mime'
 import request    from 'request'
@@ -34,7 +33,6 @@ import {
   Watchdog,
   WatchdogFood,
 }                           from 'watchdog'
-import { GError }           from 'gerror'
 import * as PUPPET          from 'wechaty-puppet'
 import { log }              from 'wechaty-puppet'
 import {
@@ -43,8 +41,6 @@ import {
 }                           from 'file-box'
 
 import {
-  envStealthless,
-  envHead,
   MEMORY_SLOT,
   qrCodeForChatie,
   VERSION,
@@ -65,6 +61,7 @@ import {
 import {
   Event,
 }                           from './event.js'
+import * as envVars         from './env-vars.js'
 
 import {
   WebAppMsgType,
@@ -75,7 +72,7 @@ import {
   WebMessageType,
   WebRoomRawMember,
   WebRoomRawPayload,
-}                           from './web-schemas.js'
+}                             from './web-schemas.js'
 import { parseMentionIdList } from './pure-function-helpers/parse-mention-id-list.js'
 
 export type ScanFoodType   = 'scan' | 'login' | 'logout'
@@ -84,6 +81,7 @@ type PuppetWeChatOptions = PUPPET.PuppetOptions & {
   head?          : boolean
   launchOptions? : LaunchOptions
   stealthless?   : boolean
+  uos?           : boolean
 }
 
 export class PuppetWeChat extends PUPPET.Puppet {
@@ -104,12 +102,13 @@ export class PuppetWeChat extends PUPPET.Puppet {
 
     this.fileId = 0
     this.bridge = new Bridge({
-      endpoint      : options.endpoint || process.env['WECHATY_PUPPET_PUPPETEER_ENDPOINT'],
-      extspam       : options.token || process.env['WECHATY_PUPPET_WECHAT_TOKEN'],
-      head          : typeof options.head === 'boolean' ? options['head'] : envHead(),
+      endpoint      : envVars.WECHATY_PUPPET_WECHAT_ENDPOINT(options.endpoint),
+      head          : envVars.WECHATY_PUPPET_WECHAT_PUPPETEER_HEAD(options.head),
       launchOptions : options.launchOptions,
       memory        : this.memory,
-      stealthless   : typeof options.stealthless === 'boolean' ? options.stealthless : envStealthless(),
+      stealthless   : envVars.WECHATY_PUPPET_WECHAT_PUPPETEER_STEALTHLESS(options.stealthless),
+      uos           : envVars.WECHATY_PUPPET_WECHAT_PUPPETEER_UOS(options.uos),
+      uosExtSpam    : envVars.WECHATY_PUPPET_WECHAT_TOKEN(options.token),
     })
 
     const SCAN_TIMEOUT  = 2 * 60 * 1000 // 2 minutes
@@ -154,7 +153,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
   }
 
   override async onStop (): Promise<void> {
-    log.verbose('PuppetWeChat', 'onSsop()')
+    log.verbose('PuppetWeChat', 'onStop()')
 
     /**
      * Clean listeners for `watchdog`
@@ -225,9 +224,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
           log.error('PuppetWeChat', 'initScanWatchdog() on(reset) recover successful')
         } catch (e) {
           log.error('PuppetWeChat', 'initScanWatchdog() on(reset) recover FAIL: %s', e as Error)
-          this.emit('error', {
-            gerror: GError.stringify(e),
-          })
+          this.emit('error', e)
         }
       }
     }))
@@ -246,9 +243,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
     // this.bridge.on('ding'     , Event.onDing.bind(this))
     this.bridge.on('heartbeat', (data: string) => this.emit('heartbeat', { data: data + 'bridge ding' }))
 
-    this.bridge.on('error',     (e: Error) => this.emit('error', {
-      gerror: GError.stringify(e),
-    }))
+    this.bridge.on('error',     (e: Error) => this.emit('error', e))
     this.bridge.on('log',       Event.onLog.bind(this))
     this.bridge.on('login',     this.wrapAsync(Event.onLogin.bind(this)))
     this.bridge.on('logout',    this.wrapAsync(Event.onLogout.bind(this)))
@@ -263,9 +258,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
       await this.bridge.stop().catch(e => {
         log.error('PuppetWeChat', 'initBridge() this.bridge.stop() rejection: %s', e as Error)
       })
-      this.emit('error', {
-        gerror: GError.stringify(e),
-      })
+      this.emit('error', e)
 
       throw e
     }
@@ -334,14 +327,12 @@ export class PuppetWeChat extends PUPPET.Puppet {
   private async messageRawPayloadToFile (
     rawPayload: WebMessageRawPayload,
   ): Promise<FileBoxInterface> {
-    let url = await this.messageRawPayloadToUrl(rawPayload)
+    const url = await this.messageRawPayloadToUrl(rawPayload)
 
     if (!url) {
       throw new Error('no url for type ' + PUPPET.types.Message[rawPayload.MsgType])
     }
 
-    // use http instead of https, because https will only success on the very first request!
-    url = url.replace(/^https/i, 'http')
     const parsedUrl = new nodeUrl.URL(url)
 
     const msgFileName = messageFilename(rawPayload)
@@ -1097,9 +1088,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
       return name
     } catch (e) {
       log.error('PuppetWeChat', 'hostname() exception:%s', e as Error)
-      this.emit('error', {
-        gerror: GError.stringify(e),
-      })
+      this.emit('error', e)
       throw e
     }
   }
@@ -1109,6 +1098,10 @@ export class PuppetWeChat extends PUPPET.Puppet {
   }
 
   async saveCookie (): Promise<void> {
+    if (this.state.inactive() === true) {
+      log.warn('PuppetWeChat', 'saveCookie() found state inactive, skipped.')
+      return
+    }
     const cookieList = await this.bridge.cookies()
     await this.memory.set(MEMORY_SLOT, cookieList)
     await this.memory.save()
@@ -1260,13 +1253,15 @@ export class PuppetWeChat extends PUPPET.Puppet {
         mediatype = 'doc'
     }
 
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      const bl = new BufferList((err: undefined | Error, data: Buffer) => {
-        if (err) reject(err)
-        else resolve(data)
-      })
-      file.pipe(bl)
-    })
+    // const buffer = await new Promise<Buffer>((resolve, reject) => {
+    //   const bl = new BufferList((err: undefined | Error, data: Buffer) => {
+    //     if (err) reject(err)
+    //     else resolve(data)
+    //   })
+    //   file.pipe(bl)
+    // })
+    // Huan(202201): fix bl not a standard Writable problem
+    const buffer = await file.toBuffer()
 
     // Sending video files is not allowed to exceed 20MB
     // https://github.com/Chatie/webwx-app-tracker/blob/
@@ -1365,9 +1360,7 @@ export class PuppetWeChat extends PUPPET.Puppet {
                   } catch (e) {
                     log.error('PuppetWeChat', 'updateMedia() body = %s', body)
                     log.error('PuppetWeChat', 'updateMedia() exception: %s', e as Error)
-                    this.emit('error', {
-                      gerror: GError.stringify(e),
-                    })
+                    this.emit('error', e)
                   }
                 }
                 if (typeof obj !== 'object' || obj.BaseResponse.Ret !== 0) {
